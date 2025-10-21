@@ -1,0 +1,61 @@
+# config/bids_structure.yaml
+version: "1.0"
+description: "PREVeNT BIDS structure configuration"
+
+# Dataset-level structure
+dataset:
+  name_pattern: "PRV-{patient_id}"  # e.g., PRV-13UL
+  
+  root_files:
+    - name: "dataset_description.json"
+      type: "json"
+      generator: "create_datasetDescription_json.py"
+    - name: "participants.json"
+      type: "json"
+      generator: "create_participatants_json.py"
+    - name: "participants.tsv"
+      type: "tsv"
+      generator: "create_participants_tsv.py"
+  
+  root_folders:
+    - name: "derivatives"
+      subfolders:
+        - name: "preprocessed"
+          populate_now: false
+        - name: "juriaan_mri"
+          populate_now: false
+          note: "Will be populated by separate pipeline"
+   
+    - name: "primary"
+      subfolders:
+        - name: "sub-PRV-{patient_id}"
+          files:
+            - name: "sub-PRV-{patient_id}_sessions.tsv"
+              generator: "create_sessions_tsv.py"
+          
+          session_pattern:
+            baseline: "ses-baseline-{age}"
+            followup: "ses-followup-{age}"
+            
+          session_structure:
+            folders:
+              - name: "eeg"
+                files:
+                  - name: "sub-PRV-{patient_id}-{age}_task-rest_eeg.json"
+                    generator: "create_eeg_json.py"
+                  - name: "sub-PRV-{patient_id}-{age}_task-rest_channels.tsv"
+                    generator: "create_channels_tsv.py"
+                  - name: "sub-PRV-{patient_id}-{age}.edf"
+                    source: "input"
+                  - name: "sub-PRV-{patient_id}-{age}.xml"
+                    source: "input"
+                    pattern: "*-annotations.xml"
+              
+              - name: "anat"
+                populate_now: false
+                note: "Will be populated by separate anatomical pipeline"
+              
+              - name: "phenotype"
+                files:
+                  - name: "visit_description.json"
+                    generator: "create_visit_description.py"
