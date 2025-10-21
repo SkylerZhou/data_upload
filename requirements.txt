@@ -1,0 +1,8 @@
+# Core dependencies for BIDS sidecar generation
+PyYAML>=6.0
+pathlib2>=2.3.0  # For Python 3.6+ compatibility
+
+# Future dependencies (commented out until needed)
+# pyEDFlib>=0.1.30  # For EDF file parsing
+# pandas>=1.3.0     # For CSV and TSV handling
+# lxml>=4.6.0       # For XML annotation parsing

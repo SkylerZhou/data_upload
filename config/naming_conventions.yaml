@@ -1,0 +1,24 @@
+# File naming patterns
+patterns:
+  edf_input: "PRV-{site_code}-{patient_id}-{age}.edf"
+  xml_input: "PRV-{site_code}-{patient_id}-{age}-annotations.xml"
+  
+  edf_output: "sub-PRV-{patient_id}-{age}.edf"
+  xml_output: "sub-PRV-{patient_id}-{age}.xml"
+  
+  eeg_json: "sub-PRV-{patient_id}-{age}_task-rest_eeg.json"
+  channels_tsv: "sub-PRV-{patient_id}-{age}_task-rest_channels.tsv"
+  
+  sessions_tsv: "sub-PRV-{patient_id}_sessions.tsv"
+  
+  dataset_name: "PRV-{patient_id}"
+  subject_id: "sub-PRV-{patient_id}"
+  
+  session_baseline: "ses-baseline-{age}"
+  session_followup: "ses-followup-{age}"
+
+# Regular expressions for parsing
+regex:
+  patient_id_from_filename: "^PRV-[^-]+-([^-]+)-.*$"
+  age_from_filename: "^.*-([^-]+)\\.(edf|xml)$"
+  site_code_from_filename: "^PRV-([^-]+)-.*$"

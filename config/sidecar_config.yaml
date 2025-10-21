@@ -1,0 +1,121 @@
+# config/sidecar_config.yaml
+version: "1.0"
+description: "PREVeNT BIDS sidecar generation configuration"
+
+# Global settings for sidecar generation
+settings:
+  validate_sources: true
+  skip_missing_fields: false
+  default_encoding: "utf-8"
+
+# Data source definitions
+sources:
+  edf_header:
+    parser: "edf_header_parser.py"
+    fields_available:
+      - "sampling_frequency"
+      - "recording_duration" 
+      - "channel_names"
+      - "channel_count"
+      - "units"
+      - "recording_start_time"
+  
+  f11_form:
+    parser: "f11_parser.py"
+    sections:
+      demographics:
+        # fields: ["age", "sex", "handedness"]
+      recording_parameters:
+        # fields: ["task_description", "institution", "equipment"]
+      clinical_info:
+        # fields: ["diagnosis", "medications"]
+  
+  xml_annotations:
+    parser: "xml_parser.py"
+    fields_available:
+      # - "annotation_timestamps"
+      # - "annotation_types"
+      # - "annotation_descriptions"
+  
+  patient_csv:
+    parser: "csv_parser.py"
+    fields_available:
+      - "patient_identifier"
+      - "random_number"
+
+# Sidecar generation mappings
+# TODO: Populate when data sources are determined
+sidecars:
+  
+  # BIDS dataset-level files
+  dataset_description_json:
+    template: "dataset_description_template.json"
+    sources:
+      # - source: "static_config"
+      # - source: "f11_form"
+      #   section: "recording_parameters"
+      #   field_mapping:
+      #     "Institution": "institution"
+  
+  participants_json:
+    template: "participants_json_template.json" 
+    sources:
+      # - source: "static_config"
+  
+  participants_tsv:
+    required_columns: ["participant_id"]
+    sources:
+      # - source: "patient_csv"
+      #   field_mapping:
+      #     "participant_id": "patient_identifier"
+      # - source: "f11_form"
+      #   section: "demographics"
+      #   field_mapping:
+      #     "age": "age_at_recording"
+      #     "sex": "sex"
+  
+  # BIDS session-level files  
+  sessions_tsv:
+    required_columns: ["session_id"]
+    sources:
+      # - source: "file_analysis"
+      #   method: "extract_ages_from_filenames"
+      #   field_mapping:
+      #     "session_id": "calculated_session_name"
+  
+  # BIDS EEG-specific files
+  eeg_json:
+    required_fields: ["TaskName", "SamplingFrequency"]
+    sources:
+      # - source: "edf_header"
+      #   field_mapping:
+      #     "SamplingFrequency": "sampling_frequency"
+      #     "RecordingDuration": "recording_duration"
+      # - source: "f11_form"
+      #   section: "recording_parameters"
+      #   field_mapping:
+      #     "TaskName": "task_description"
+      #     "InstitutionName": "institution"
+  
+  channels_tsv:
+    required_columns: ["name", "type", "units"]
+    sources:
+      # - source: "edf_header"
+      #   field_mapping:
+      #     "name": "channel_names"
+      #     "sampling_frequency": "sampling_frequency"
+      #     "units": "units"
+
+  # Session-specific files
+  visit_description_json:
+    sources:
+      # - source: "f11_form"
+      #   section: "clinical_info"
+      # - source: "file_analysis"
+      #   method: "extract_session_info"
+
+# Validation rules for generated sidecars
+validation:
+  required_files: ["dataset_description.json", "participants.tsv"]
+  eeg_json_required_fields: ["TaskName", "SamplingFrequency"]
+  channels_tsv_required_columns: ["name", "type", "units"]
