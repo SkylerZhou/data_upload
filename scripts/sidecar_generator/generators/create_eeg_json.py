@@ -23,6 +23,55 @@ from edf_header_parser import extract_from_edf_header
 from f11_parser import extract_from_f11_form
 
 
+def map_fields_from_sources(source_data_dict, field_mapping_config):
+    """
+    Map fields from source data based on configuration
+    
+    Args:
+        source_data_dict (dict): All available source data {"edf": {...}, "f11": {...}}
+        field_mapping_config (list): Configuration defining which fields to use
+        
+    Returns:
+        dict: Mapped fields for BIDS JSON
+        
+    Example config:
+    sources:
+      - source: "edf_header"
+        field_mapping:
+          "SamplingFrequency": "sampling_frequency"
+          "EEGChannelCount": "number_of_channels"
+      - source: "f11_form"  
+        field_mapping:
+          "TaskName": "task_description"
+          "InstitutionName": "institution"
+    """
+    mapped_fields = {}
+    
+    for source_config in field_mapping_config:
+        source_name = source_config.get("source")
+        field_mapping = source_config.get("field_mapping", {})
+        
+        # Map source names to our data keys
+        source_key_mapping = {
+            "edf_header": "edf",
+            "f11_form": "f11", 
+            "xml_annotations": "xml"
+        }
+        
+        source_key = source_key_mapping.get(source_name)
+        if source_key and source_key in source_data_dict:
+            source_data = source_data_dict[source_key]
+            
+            for bids_field, source_field in field_mapping.items():
+                if source_field in source_data:
+                    mapped_fields[bids_field] = source_data[source_field]
+                    print(f"✅ Mapped {bids_field} = {source_data[source_field]} (from {source_name}.{source_field})")
+                else:
+                    print(f"⚠️  Field {source_field} not found in {source_name} data")
+    
+    return mapped_fields
+
+
 def load_configs():
     """Load both BIDS structure and sidecar configuration files"""
     # Get the script directory and navigate to config folder
@@ -65,56 +114,71 @@ def create_eeg_json(output_path, edf_file_path, patient_id, session_age):
     print(f"Source EDF: {edf_file_path}")
     print(f"Patient: {patient_id}, Session: {session_age}")
     
-    # Extract data from various sources using dedicated extractors
+    # Extract ALL available data from sources (comprehensive extraction)
     try:
-        edf_metadata = extract_from_edf_header(edf_file_path)
-        f11_metadata = extract_from_f11_form(patient_id, "eeg_json")
+        edf_metadata = extract_from_edf_header(edf_file_path)  # Gets ALL EDF fields
+        f11_metadata = extract_from_f11_form(patient_id)       # Gets ALL F11 fields
+        
+        # Get field mapping configuration for EEG JSON
+        eeg_field_config = eeg_config.get('sources', [])
+        print(f"📋 Available EDF fields: {list(edf_metadata.keys())}")
+        print(f"📋 Available F11 fields: {list(f11_metadata.keys())}")
+        
     except Exception as e:
         print(f"⚠️  Warning: Error extracting metadata: {e}")
         print("   Using placeholder values")
         edf_metadata = {"sampling_frequency": None, "recording_duration": None, "number_of_channels": None}
         f11_metadata = {"task_description": None, "institution": None, "equipment_manufacturer": None}
     
+    # Combine all source data for field mapping
+    all_source_data = {
+        "edf": edf_metadata,
+        "f11": f11_metadata
+        # "xml": xml_metadata  # TODO: Add when XML parser is implemented
+    }
+    
+    # Map fields based on configuration (if available)
+    mapped_fields = {}
+    if eeg_config and 'sources' in eeg_config:
+        mapped_fields = map_fields_from_sources(all_source_data, eeg_config['sources'])
+    
     # Create the BIDS-compliant EEG JSON structure
-    # Based on BIDS specification for EEG data
+    # Use mapped fields when available, fall back to direct access for now
     eeg_json = {
-        # Required fields
-        "TaskName": "rest",  # TODO: Get from F11 or config
-        "SamplingFrequency": edf_metadata["sampling_frequency"],  # TODO: Extract from EDF
+        # Required fields - try mapped first, then direct access
+        "TaskName": mapped_fields.get("TaskName", f11_metadata.get("task_description", "rest")),
+        "SamplingFrequency": mapped_fields.get("SamplingFrequency", edf_metadata.get("sampling_frequency")),
         
         # Recommended fields  
-        "PowerLineFrequency": 60,  # TODO: Determine from location/equipment
-        "SoftwareFilters": "n/a",  # TODO: Determine if any filters applied
+        "PowerLineFrequency": mapped_fields.get("PowerLineFrequency", 60),  # TODO: Get from config or F11
+        "SoftwareFilters": mapped_fields.get("SoftwareFilters", "n/a"),     # TODO: Get from EDF or F11
         
         # Optional fields that may be available
-        "RecordingDuration": edf_metadata["recording_duration"],  # TODO: Extract from EDF
-        "RecordingType": "continuous",  # TODO: Verify this is correct
-        "EEGReference": "",  # TODO: Extract from EDF or F11
-        "EEGGround": "",  # TODO: Extract from EDF or F11
+        "RecordingDuration": mapped_fields.get("RecordingDuration", edf_metadata.get("recording_duration")),
+        "RecordingType": mapped_fields.get("RecordingType", "continuous"),
+        "EEGReference": mapped_fields.get("EEGReference", edf_metadata.get("reference", "")),
+        "EEGGround": mapped_fields.get("EEGGround", edf_metadata.get("ground", "")),
         
         # Institution and equipment info
-        "InstitutionName": f11_metadata.get("institution"),  # From F11 extractor
-        "InstitutionAddress": "",  # TODO: Add to F11 if available
-        "Manufacturer": f11_metadata.get("equipment_manufacturer"),  # From F11 extractor  
-        "ManufacturersModelName": f11_metadata.get("equipment_model"),  # From F11 extractor
-        "SoftwareVersions": "",  # TODO: Extract from EDF header
+        "InstitutionName": mapped_fields.get("InstitutionName", f11_metadata.get("institution")),
+        "InstitutionAddress": mapped_fields.get("InstitutionAddress", f11_metadata.get("institution_address", "")),
+        "Manufacturer": mapped_fields.get("Manufacturer", f11_metadata.get("equipment_manufacturer")),
+        "ManufacturersModelName": mapped_fields.get("ManufacturersModelName", f11_metadata.get("equipment_model")),
+        "SoftwareVersions": mapped_fields.get("SoftwareVersions", edf_metadata.get("software_version", "")),
         
         # Subject and session info
-        "SubjectArtefactDescription": "",  # TODO: Check if available in annotations
+        "SubjectArtefactDescription": mapped_fields.get("SubjectArtefactDescription", ""),
         
         # Additional metadata
-        "HowManyBadChannels": 0,  # TODO: Analyze EDF or annotations
-        "EEGChannelCount": edf_metadata["number_of_channels"],  # TODO: Extract from EDF
+        "HowManyBadChannels": mapped_fields.get("HowManyBadChannels", 0),
+        "EEGChannelCount": mapped_fields.get("EEGChannelCount", edf_metadata.get("number_of_channels")),
         
-        # Placeholder for future expansion
-        "TODO_FIELDS": {
-            "note": "These fields will be populated when data sources are implemented",
-            "sources_to_implement": [
-                "EDF header parsing",
-                "F11 form parsing", 
-                "XML annotation analysis",
-                "Equipment database lookup"
-            ]
+        # Development info (remove when fully implemented)
+        "_dev_info": {
+            "note": "Field mapping system active - remove this section when fully implemented",
+            "mapped_fields_used": list(mapped_fields.keys()),
+            "available_edf_fields": list(edf_metadata.keys()),
+            "available_f11_fields": list(f11_metadata.keys())
         }
     }
     
